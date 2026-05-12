@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>X chromosome counting and inactivation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #fcfcfd;
+            color: #1e293b;
+        }
+        .chromosome-x {
+            background: linear-gradient(180deg, #60a5fa 0%, #2563eb 100%);
+            width: 40px;
+            height: 120px;
+            border-radius: 20px;
+            transition: all 1.2s ease;
+            position: relative;
+            z-index: 20;
+        }
+        .chromosome-a {
+            background: linear-gradient(180deg, #94a3b8 0%, #475569 100%);
+            width: 30px;
+            height: 100px;
+            border-radius: 15px;
+            opacity: 0.8;
+        }
+        .chromosome-y {
+            background: linear-gradient(180deg, #34d399 0%, #059669 100%);
+            width: 35px;
+            height: 80px;
+            border-radius: 18px;
+        }
+        .silenced {
+            filter: grayscale(1) brightness(0.7);
+            opacity: 0.8;
+            box-shadow: 0 0 20px rgba(168, 85, 247, 0.4);
+        }
+        /* XIST RNA Styling - More Dense */
+        .xist-strand {
+            position: absolute;
+            background: radial-gradient(circle, rgba(192, 132, 252, 0.95) 0%, rgba(147, 51, 234, 0.2) 70%);
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            filter: blur(2px);
+            z-index: 40;
+            pointer-events: none;
+            animation: xist-pulse 1.5s ease-in-out infinite alternate;
+        }
+        @keyframes xist-pulse {
+            from { transform: scale(1); opacity: 0.6; }
+            to { transform: scale(1.4); opacity: 1; }
+        }
+        .molecule {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            position: absolute;
+            transition: all 1.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+            z-index: 50;
+        }
+        .rlim { 
+            background-color: #3b82f6; 
+            box-shadow: 0 0 6px rgba(59, 130, 246, 0.8);
+            border: 2px solid white;
+        }
+        .zfp42 { 
+            background-color: #f43f5e; 
+            box-shadow: 0 0 6px rgba(244, 63, 94, 0.8);
+            border: 2px solid white;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-10 font-sans">
+
+    <div class="max-w-6xl mx-auto">
+        <header class="mb-8 border-b pb-6">
+            <h1 class="text-3xl font-light text-slate-800">X chromosome counting and inactivation <span class="font-bold">Simulator</span></h1>
+            <p class="text-slate-500 italic">Tracking RLIM (XIST Activator) and ZFP42 (XIST Inhibitor) interaction</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+            
+            <div class="lg:col-span-1 space-y-4">
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <h2 class="text-xs font-bold uppercase tracking-widest text-slate-400 mb-4">Genotype Selection</h2>
+                    <div class="space-y-2" id="genotype-buttons">
+                        <button onclick="selectGenotype('XX')" id="btn-XX" class="w-full text-left px-4 py-2 rounded-lg border hover:border-blue-400 transition-all font-medium">XX Female</button>
+                        <button onclick="selectGenotype('X-')" id="btn-X-" class="w-full text-left px-4 py-2 rounded-lg border hover:border-blue-400 transition-all font-medium">X- Turner</button>
+                        <button onclick="selectGenotype('XXX')" id="btn-XXX" class="w-full text-left px-4 py-2 rounded-lg border hover:border-blue-400 transition-all font-medium">XXX Female</button>
+                        <button onclick="selectGenotype('XY')" id="btn-XY" class="w-full text-left px-4 py-2 rounded-lg border hover:border-blue-400 transition-all font-medium">XY Male</button>
+                        <button onclick="selectGenotype('XXY')" id="btn-XXY" class="w-full text-left px-4 py-2 rounded-lg border hover:border-blue-400 transition-all font-medium">XXY Klinefelter</button>
+                    </div>
+
+                    <button onclick="runSimulation()" id="run-btn" class="w-full mt-6 bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-900 transition-all disabled:opacity-50">
+                        Initiate Counting
+                    </button>
+                    <button onclick="resetLab()" class="w-full mt-2 text-slate-400 text-sm hover:text-slate-600">Reset System</button>
+                </div>
+
+                <div class="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                    <span class="text-[10px] font-bold text-blue-800 uppercase block mb-2">Molecular Census</span>
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-xs text-blue-600 font-bold">RLIM (XIST activator):</span>
+                        <span id="count-rlim" class="font-black text-blue-700">0</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs text-rose-600 font-bold">ZFP42 (XIST inhibitor):</span>
+                        <span id="count-zfp" class="font-black text-rose-700">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Simulation Window -->
+            <div class="lg:col-span-3 bg-white rounded-3xl p-6 shadow-sm border border-slate-200 relative overflow-hidden min-h-[500px]">
+                <div id="particle-layer" class="absolute inset-0 pointer-events-none"></div>
+                
+                <div class="grid grid-cols-2 h-full gap-4 pt-10">
+                    <!-- Autosome Origin -->
+                    <div class="flex flex-col items-center">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase mb-4 tracking-tighter">Autosome Set (Diploid)</span>
+                        <div class="flex gap-4" id="autosome-pair">
+                            <div class="chromosome-a shadow-sm flex items-center justify-center text-white text-[10px] font-bold">A</div>
+                            <div class="chromosome-a shadow-sm flex items-center justify-center text-white text-[10px] font-bold">A</div>
+                        </div>
+                    </div>
+
+                    <!-- Sex Chromosome Origin -->
+                    <div class="flex flex-col items-center border-l border-dashed border-slate-100">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase mb-4 tracking-tighter">Sex Chromosomes</span>
+                        <div class="flex gap-6 items-end" id="sex-chromosomes"></div>
+                    </div>
+                </div>
+
+                <div id="log-box" class="absolute bottom-6 left-6 right-6 text-center">
+                    <p id="molecular-status" class="text-slate-400 text-sm font-medium italic">Configure genotype to observe molecular paths.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const state = {
+            genotype: null,
+            xCount: 0,
+            yCount: 0,
+            isRunning: false
+        };
+
+        const configs = {
+            'XX':  { x: 2, y: 0, rlim: 8 },
+            'X-':  { x: 1, y: 0, rlim: 4 },
+            'XXX': { x: 3, y: 0, rlim: 12 },
+            'XY':  { x: 1, y: 1, rlim: 4 },
+            'XXY': { x: 2, y: 1, rlim: 8 }
+        };
+
+        function selectGenotype(key) {
+            if (state.isRunning) return;
+            state.genotype = key;
+            state.xCount = configs[key].x;
+            state.yCount = configs[key].y;
+            
+            document.querySelectorAll('#genotype-buttons button').forEach(btn => {
+                btn.classList.remove('border-blue-500', 'bg-blue-50', 'text-blue-700');
+            });
+            document.getElementById(`btn-${key}`).classList.add('border-blue-500', 'bg-blue-50', 'text-blue-700');
+            
+            document.getElementById('count-rlim').innerText = configs[key].rlim;
+            document.getElementById('count-zfp').innerText = '6';
+            document.getElementById('molecular-status').innerText = `Genotype ${key} loaded. Ready to simulate regulator migration.`;
+            
+            renderChromosomes();
+        }
+
+        function renderChromosomes() {
+            const container = document.getElementById('sex-chromosomes');
+            container.innerHTML = '';
+            for (let i = 0; i < state.xCount; i++) {
+                const x = document.createElement('div');
+                x.className = 'chromosome-x shadow-md flex items-center justify-center text-white font-black italic';
+                x.id = `x-chrom-${i}`;
+                x.innerText = 'X';
+                container.appendChild(x);
+            }
+            if (state.yCount > 0) {
+                const y = document.createElement('div');
+                y.className = 'chromosome-y shadow-md flex items-center justify-center text-white font-black italic text-xs';
+                y.innerText = 'Y';
+                container.appendChild(y);
+            }
+        }
+
+        function runSimulation() {
+            if (!state.genotype || state.isRunning) return;
+            
+            state.isRunning = true;
+            document.getElementById('run-btn').disabled = true;
+            const particleLayer = document.getElementById('particle-layer');
+            particleLayer.innerHTML = '';
+            
+            const autosomes = document.querySelectorAll('.chromosome-a');
+            const xChroms = document.querySelectorAll('.chromosome-x');
+
+            // 1. Spawn Inhibitors (ZFP42) - 3 per A
+            const zfpMolecules = [];
+            autosomes.forEach((a, aIdx) => {
+                const rect = a.getBoundingClientRect();
+                const pRect = particleLayer.getBoundingClientRect();
+                for(let i=0; i<3; i++) {
+                    const m = document.createElement('div');
+                    m.className = 'molecule zfp42';
+                    m.style.left = (rect.left - pRect.left + 5) + 'px';
+                    m.style.top = (rect.top - pRect.top + 10 + (i*25)) + 'px';
+                    particleLayer.appendChild(m);
+                    zfpMolecules.push(m);
+                }
+            });
+
+            // 2. Spawn Activators (RLIM) - 4 per X
+            const rlimMolecules = [];
+            xChroms.forEach(x => {
+                const rect = x.getBoundingClientRect();
+                const pRect = particleLayer.getBoundingClientRect();
+                for(let i=0; i<4; i++) {
+                    const m = document.createElement('div');
+                    m.className = 'molecule rlim';
+                    m.style.left = (rect.left - pRect.left + 14) + 'px';
+                    m.style.top = (rect.top - pRect.top + 10 + (i*25)) + 'px';
+                    particleLayer.appendChild(m);
+                    rlimMolecules.push(m);
+                }
+            });
+
+            document.getElementById('molecular-status').innerText = "Regulators migrating...";
+
+            // 3. Movement with Non-Overlapping Position Logic
+            setTimeout(() => {
+                zfpMolecules.forEach((m, idx) => {
+                    // Assign each ZFP to an X chromosome and a unique Y-offset so they don't overlap
+                    const xIdx = idx % xChroms.length;
+                    const targetX = xChroms[xIdx];
+                    const rect = targetX.getBoundingClientRect();
+                    const pRect = particleLayer.getBoundingClientRect();
+                    
+                    // Distinct positioning on the X chromosome
+                    const verticalPos = 15 + (Math.floor(idx / xChroms.length) * 25); 
+                    const horizontalShift = (idx % 2 === 0) ? -5 : 5;
+                    
+                    m.style.left = (rect.left - pRect.left + 14 + horizontalShift) + 'px';
+                    m.style.top = (rect.top - pRect.top + verticalPos) + 'px';
+                });
+                
+                rlimMolecules.forEach((m) => {
+                    m.style.transform = `translate(${Math.random()*60 - 30}px, ${Math.random()*60 - 30}px)`;
+                });
+            }, 100);
+
+            // 4. Threshold Logic & Intensive XIST Coating
+            setTimeout(() => {
+                const totalRLIM = rlimMolecules.length;
+                const totalZFP = zfpMolecules.length;
+                
+                if (totalRLIM > totalZFP) {
+                    const numToSilence = state.xCount - 1;
+                    document.getElementById('molecular-status').innerHTML = `<span class="text-blue-600 font-bold">Excess XIST activator RLIM (${totalRLIM} > ${totalZFP}).</span><br>XIST synthesis initiated...`;
+                    
+                    const indices = Array.from({length: state.xCount}, (_, i) => i);
+                    // Usually we keep the first one active (randomly)
+                    const activeIdx = Math.floor(Math.random() * indices.length);
+                    indices.splice(activeIdx, 1);
+                    
+                    indices.forEach((targetIdx) => {
+                        const xElem = document.getElementById(`x-chrom-${targetIdx}`);
+                        
+                        // Intensive Coating: 30 particles per silenced X
+                        for(let j=0; j<30; j++) {
+                            setTimeout(() => {
+                                const xist = document.createElement('div');
+                                xist.className = 'xist-strand';
+                                xist.style.left = (Math.random() * 32 - 4) + 'px';
+                                xist.style.top = (Math.random() * 110 - 5) + 'px';
+                                xist.style.animationDelay = (Math.random() * 2) + 's';
+                                xElem.appendChild(xist);
+                            }, j * 50);
+                        }
+
+                        // Apply silencing transition
+                        setTimeout(() => {
+                            xElem.classList.add('silenced');
+                            document.getElementById('molecular-status').innerHTML = `<span class="text-purple-600 font-bold">X-Inactivation Complete.</span><br>Dense XIST coating initiates X chromosome silencing.`;
+                        }, 2500);
+                    });
+                } else {
+                    document.getElementById('molecular-status').innerHTML = `<span class="text-rose-600 font-bold">XIST inhibitor ZFP42 exceeds XIST activator RLIM (${totalZFP} ≥ ${totalRLIM}).</span><br>XIST expression remains suppressed; no X silencing occurs.`;
+                }
+                
+                setTimeout(() => {
+                    state.isRunning = false;
+                    document.getElementById('run-btn').disabled = false;
+                }, 3500);
+            }, 2500);
+        }
+
+        function resetLab() {
+            if (state.isRunning) return;
+            state.genotype = null;
+            document.getElementById('sex-chromosomes').innerHTML = '';
+            document.getElementById('particle-layer').innerHTML = '';
+            document.getElementById('molecular-status').innerText = "Configure genotype to observe molecular paths.";
+            document.getElementById('count-rlim').innerText = '0';
+            document.querySelectorAll('#genotype-buttons button').forEach(btn => {
+                btn.classList.remove('border-blue-500', 'bg-blue-50', 'text-blue-700');
+            });
+        }
+    </script>
+</body>
+</html>
